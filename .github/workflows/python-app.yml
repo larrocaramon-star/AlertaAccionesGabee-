@@ -15,9 +15,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Instalar requests
-        run: pip install requests
+      - name: Instalar herramientas 
+        run: pip install requests yfinance
 
       - name: Ejecutar bot
         run: python bot.py
-        
+        env:
+        TELEGRAM_TOKEN: 8980218948:AAF3SmcMxlz4aYXjAoJXFnQ_FfM98_e6Zic
+   TELEGRAM_CHAT_ID:   6219209932
