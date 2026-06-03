@@ -1,41 +1,67 @@
 
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 
 def buscar_vuelos():
-    origen = "MVD" # Montevideo
+    origen = "MVD"  # Montevideo
     destino = "MIA" # Miami
     pasajeros = 3
     
-    # Buscamos una fecha de muestra a 3 meses desde hoy para ver tarifas estables
-    fecha_viaje = (datetime.now() + timedelta(days=90)).strftime('%Y-%m-%d')
+    # Configuramos el rango flexible para febrero 2026
+    fecha_desde = "01/02/2026"
+    fecha_hasta = "28/02/2026"
+    
+    # Tus 20 días planeados con el margen de 3 días hacia atrás y adelante (17 a 23 días de estadía)
+    estadia_min = 17
+    estadia_max = 23
     
     try:
-        # Consulta rápida a motor de tarifas referenciales en USD
-        url = f"https://api.skypicker.com/flights?fly_from={origen}&to={destino}&date_from={fecha_viaje}&date_to={fecha_viaje}&passengers={pasajeros}&curr=USD&limit=1"
-        response = requests.get(url, timeout=15)
+        # Usamos la API de Kiwi con parámetros de rango de fechas y estadía flexible
+        url = (
+            f"https://api.skypicker.com/flights?"
+            f"fly_from={origen}&to={destino}&"
+            f"date_from={fecha_desde}&date_to={fecha_hasta}&"
+            f"days_in_安定_from={estadia_min}&days_in_安定_to={estadia_max}&"
+            f"passengers={pasajeros}&curr=USD&limit=3&sort=price"
+        )
+        # Corrección técnica para la API de Kiwi (days_in_stay)
+        url = url.replace("安定", "stay")
+        
+        response = requests.get(url, timeout=20)
         
         if response.status_code == 200:
             datos = response.json()
             if "data" in datos and datos["data"]:
-                vuelo = datos["data"][0]
-                precio_total = vuelo["price"]
-                aerolinea = vuelo.get("airlines", ["Regular"])[0]
+                # Tomamos la opción más barata del rango encontrado
+                mejor_vuelo = datos["data"][0]
+                precio_total = mejor_vuelo["price"]
+                
+                # Extraemos las fechas exactas que encontró el buscador
+                fecha_salida_unix = mejor_vuelo["route"][0]["dTime"]
+                fecha_salida = datetime.fromtimestamp(fecha_salida_unix).strftime('%d/%m/%Y')
+                
+                # Buscamos el vuelo de regreso en la ruta para saber cuándo vuelve
+                fecha_regreso_unix = mejor_vuelo["route"][-1]["dTime"]
+                fecha_regreso = datetime.fromtimestamp(fecha_regreso_unix).strftime('%d/%m/%Y')
+                
+                aerolinea = mejor_vuelo.get("airlines", ["Regular"])[0]
                 
                 mensaje = (
-                    f"✈️ *¡ALERTA DE VUELOS MVD -> MIA!* ✈️\n\n"
+                    f"✈️ *¡RADAR DE VUELOS FEBRERO 2026!* ✈️\n\n"
                     f"👥 *Pasajeros:* {pasajeros} personas\n"
-                    f"📅 *Fecha de muestra:* {fecha_viaje}\n"
+                    f"🛫 *Salida ideal encontrada:* {fecha_salida}\n"
+                    f"🛬 *Regreso:* {fecha_regreso}\n"
+                    f"⏳ *Estadía:* {mejor_vuelo.get('nightsInDst')} noches\n"
                     f"💰 *Mejor precio TOTAL:* USD {precio_total}\n"
                     f"🏢 *Aerolínea:* {aerolinea}\n\n"
-                    f" _Este es el precio más bajo detectado hoy automáticamente._"
+                    f" _Este precio cubre a las 3 personas en el rango flexible de febrero._"
                 )
                 return mensaje
     except Exception as e:
         return f"⚠️ Error en el radar de vuelos: {str(e)}"
     
-    return "✈️ *Radar de Vuelos MVD ➔ MIA*\n\nNo se pudieron obtener tarifas en este momento. Reintentando en el próximo turno automático."
+    return "✈️ *Radar de Vuelos MVD ➔ MIA*\n\nNo se detectaron tarifas disponibles para febrero en este momento. Reintentando en el próximo turno automático."
 
 def enviar_telegram(mensaje):
     token = os.environ.get("TELEGRAM_TOKEN")
