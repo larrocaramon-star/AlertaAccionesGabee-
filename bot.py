@@ -1,61 +1,55 @@
 
 import os
 import requests
-import yfinance as yf
+from datetime import datetime, timedelta
 
-# 1. CONFIGURACIÓN DEL BOT DE TELEGRAM
-# GitHub guarda de forma segura tu Token y tu ID de Chat para que nadie los vea.
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-# 2. TU LISTA DE COMPRAS (Acá elegís qué mirar y a qué precio está "barata")
-# El formato es: "TICKER": Precio_Máximo_A_Pagar
-# Podés cambiar los números y las empresas cuando quieras.
-ACCIONES_A_MONITOREAR = {
-    "RBLX": 35.0, # Roblox: Avisame si baja de 35 dólares
-    "NFLX": 600.0, # Netflix: Avisame si baja de 600 dólares
-    "CAN": 1.5 # Canaan (Crypto/Minería): Avisame si baja de 1.5 dólares
-}
-
-def enviar_alerta_telegram(mensaje):
-    """Esta función se encarga de mandar el mensaje a tu celular"""
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": mensaje}
+def buscar_vuelos():
+    origen = "MVD" # Montevideo
+    destino = "MIA" # Miami
+    pasajeros = 3
+    
+    # Buscamos una fecha de muestra a 3 meses desde hoy para ver tarifas estables
+    fecha_viaje = (datetime.now() + timedelta(days=90)).strftime('%Y-%m-%d')
+    
     try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        print(f"Error al enviar a Telegram: {e}")
-
-def revisar_mercado():
-    """Esta función mira los precios reales en Yahoo Finance y compara"""
-    print("Iniciando revisión de precios...")
-    mensajes_alerta = []
-
-    for empresa, precio_barato in ACCIONES_A_MONITOREAR.items():
-        try:
-            # Buscamos la información de la acción en Yahoo Finance
-            ticker = yf.Ticker(empresa)
-            # Tomamos el último precio de cierre del mercado
-            precio_actual = ticker.history(period="1d")["Close"].iloc[-1]
-            
-            print(f"{empresa}: Precio actual es {precio_actual:.2f} USD (Tu límite es {precio_barato} USD)")
-
-            # SI EL PRECIO ACTUAL ES MENOR O IGUAL AL QUE VOS QUERÉS, SE ACTIVA LA ALERTA
-            if precio_actual <= precio_barato:
-                mensajes_alerta.append(f"🚨 ¡OFERTA! {empresa} está a {precio_actual:.2f} USD (Precio objetivo: {precio_barato} USD)")
+        # Consulta rápida a motor de tarifas referenciales en USD
+        url = f"https://api.skypicker.com/flights?fly_from={origen}&to={destino}&date_from={fecha_viaje}&date_to={fecha_viaje}&passengers={pasajeros}&curr=USD&limit=1"
+        response = requests.get(url, timeout=15)
         
-        except Exception as e:
-            print(f"No se pudo revisar {empresa}: {e}")
+        if response.status_code == 200:
+            datos = response.json()
+            if "data" in datos and datos["data"]:
+                vuelo = datos["data"][0]
+                precio_total = vuelo["price"]
+                aerolinea = vuelo.get("airlines", ["Regular"])[0]
+                
+                mensaje = (
+                    f"✈️ *¡ALERTA DE VUELOS MVD -> MIA!* ✈️\n\n"
+                    f"👥 *Pasajeros:* {pasajeros} personas\n"
+                    f"📅 *Fecha de muestra:* {fecha_viaje}\n"
+                    f"💰 *Mejor precio TOTAL:* USD {precio_total}\n"
+                    f"🏢 *Aerolínea:* {aerolinea}\n\n"
+                    f" _Este es el precio más bajo detectado hoy automáticamente._"
+                )
+                return mensaje
+    except Exception as e:
+        return f"⚠️ Error en el radar de vuelos: {str(e)}"
+    
+    return "✈️ *Radar de Vuelos MVD ➔ MIA*\n\nNo se pudieron obtener tarifas en este momento. Reintentando en el próximo turno automático."
 
-    # Si encontramos acciones baratas, mandamos el mensaje reunido
-    if mensajes_alerta:
-        mensaje_final = "📈 Alertas de Acciones Baratas:\n\n" + "\n".join(mensajes_alerta)
-        enviar_alerta_telegram(mensaje_final)
-        print("¡Alertas enviadas a Telegram!")
-    else:
-        print("Todo normal, ninguna acción alcanzó el precio de oferta.")
+def enviar_telegram(mensaje):
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": mensaje,
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, json=payload)
 
-# Esto le dice a Python que ejecute la revisión cuando GitHub Actions active el script
 if __name__ == "__main__":
-    revisar_mercado()
+    reporte = buscar_vuelos()
+    enviar_telegram(reporte)
 
