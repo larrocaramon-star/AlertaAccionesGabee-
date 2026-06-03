@@ -1,8 +1,10 @@
 
-name: Ejecutar Bot
+name: Alerta Diaria de Vuelos
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '0 23 * * *' # Corre solo todos los días a las 20:00 de Uruguay
+  workflow_dispatch: # Te deja probarlo de forma manual cuando quieras
 
 jobs:
   run-bot:
@@ -17,10 +19,11 @@ jobs:
           python-version: '3.11'
 
       - name: Instalar herramientas
-        run: pip install requests yfinance
+        run: pip install requests
 
-      - name: Ejecutar bot
+      - name: Ejecutar rastreador
         run: python bot.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
